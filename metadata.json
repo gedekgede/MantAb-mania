@@ -1,0 +1,6 @@
+{
+  "name": "KawalSales",
+  "description": "Aplikasi kontrol & monitoring kerja asisten sales: pelacakan lokasi real-time, tugas harian, cek stok & kebersihan kendaraan, manajemen planogram terbaru, laporan kunjungan, dan sign-off akhir hari.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

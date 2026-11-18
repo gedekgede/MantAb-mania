@@ -1,0 +1,509 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny all reads/writes by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        ('email' in request.auth.token &&
+         'email_verified' in request.auth.token &&
+         request.auth.token.email == 'riogede90@gmail.com' &&
+         request.auth.token.email_verified == true)
+      );
+    }
+
+    function isBoundedStringList(arr, minLen, maxLen) {
+      return arr is list &&
+             arr.size() >= minLen &&
+             arr.size() <= maxLen &&
+             (arr.size() == 0 || (arr[0] is string && arr[0].size() >= 1 && arr[0].size() <= 128));
+    }
+
+    function isTeamAdmin(teamId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/teams/$(teamId)) &&
+             request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.adminUids;
+    }
+
+    // --- Validation Helpers ---
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+             data.role in ['ASSISTANT', 'SALES_LEAD', 'ADMIN'] &&
+             isValidId(data.activeTeamId) &&
+             (!('vehiclePlate' in data) || (data.vehiclePlate is string && data.vehiclePlate.size() <= 24)) &&
+             (!('accompaniedSalesName' in data) || (data.accompaniedSalesName is string && data.accompaniedSalesName.size() <= 80));
+    }
+
+    function isValidTeam(data) {
+      return data.teamName is string && data.teamName.size() >= 2 && data.teamName.size() <= 80 &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             isValidId(data.joinCode) &&
+             isBoundedStringList(data.memberUids, 1, 20) &&
+             isBoundedStringList(data.adminUids, 1, 10) &&
+             data.ownerUid in data.memberUids &&
+             data.ownerUid in data.adminUids;
+    }
+
+    function isValidPlanogram(data) {
+      return isValidId(data.teamId) &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             data.createdByName is string && data.createdByName.size() >= 1 && data.createdByName.size() <= 80 &&
+             isBoundedStringList(data.memberUids, 1, 20) &&
+             data.title is string && data.title.size() >= 2 && data.title.size() <= 100 &&
+             data.versionCode is string && data.versionCode.size() >= 1 && data.versionCode.size() <= 32 &&
+             data.cycleName is string && data.cycleName.size() >= 1 && data.cycleName.size() <= 60 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+             data.shelfInstructions is string && data.shelfInstructions.size() >= 1 && data.shelfInstructions.size() <= 1500 &&
+             (!('promoHighlight' in data) || (data.promoHighlight is string && data.promoHighlight.size() <= 300)) &&
+             (!('imageBase64' in data) || (data.imageBase64 is string && data.imageBase64.size() <= 350000)) &&
+             data.active is bool &&
+             data.revision is int && data.revision >= 1 && data.revision <= 100000;
+    }
+
+    function isValidCsuOutlet(data) {
+      return isValidId(data.teamId) &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isBoundedStringList(data.memberUids, 1, 20) &&
+             data.csuCode is string && data.csuCode.size() >= 1 && data.csuCode.size() <= 32 &&
+             data.storeName is string && data.storeName.size() >= 2 && data.storeName.size() <= 100 &&
+             data.address is string && data.address.size() <= 200 &&
+             data.latitude is number && data.latitude >= -90.0 && data.latitude <= 90.0 &&
+             data.longitude is number && data.longitude >= -180.0 && data.longitude <= 180.0 &&
+             data.assignedAssistantName is string && data.assignedAssistantName.size() <= 80 &&
+             data.priority in ['WAJIB', 'PRIORITAS', 'REGULER'] &&
+             data.active is bool;
+    }
+
+    function isValidSalesAssistant(data) {
+      return isValidId(data.teamId) &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isBoundedStringList(data.memberUids, 1, 20) &&
+             data.employeeCode is string && data.employeeCode.size() >= 1 && data.employeeCode.size() <= 32 &&
+             data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 80 &&
+             data.vehiclePlate is string && data.vehiclePlate.size() <= 24 &&
+             data.pairedSalesName is string && data.pairedSalesName.size() <= 80 &&
+             data.region is string && data.region.size() <= 60 &&
+             data.active is bool;
+    }
+
+    function isValidDailyShift(data) {
+      return isValidId(data.teamId) &&
+             data.assistantUid is string && data.assistantUid.size() >= 1 && data.assistantUid.size() <= 128 &&
+             data.assistantName is string && data.assistantName.size() >= 1 && data.assistantName.size() <= 80 &&
+             data.accompaniedSalesName is string && data.accompaniedSalesName.size() >= 1 && data.accompaniedSalesName.size() <= 80 &&
+             data.vehiclePlate is string && data.vehiclePlate.size() >= 1 && data.vehiclePlate.size() <= 24 &&
+             data.shiftDate is string && data.shiftDate.size() >= 8 && data.shiftDate.size() <= 20 &&
+             data.activeCycleName is string && data.activeCycleName.size() >= 1 && data.activeCycleName.size() <= 60 &&
+             isBoundedStringList(data.memberUids, 1, 20) &&
+             data.status in ['ACTIVE', 'PENDING_SIGNOFF', 'SIGNED_OFF'] &&
+             data.trackingActive is bool &&
+             data.latitude is number && data.latitude >= -90.0 && data.latitude <= 90.0 &&
+             data.longitude is number && data.longitude >= -180.0 && data.longitude <= 180.0 &&
+             data.accuracyMeters is number && data.accuracyMeters >= 0.0 && data.accuracyMeters <= 100000.0 &&
+             data.locationLabel is string && data.locationLabel.size() <= 160 &&
+             data.taskOrderPicked is bool &&
+             data.taskOrderNote is string && data.taskOrderNote.size() <= 300 &&
+             data.taskPlanogramArranged is bool &&
+             data.taskPlanogramNote is string && data.taskPlanogramNote.size() <= 300 &&
+             data.taskPromoSetup is bool &&
+             data.taskPromoNote is string && data.taskPromoNote.size() <= 300 &&
+             data.preStockChecked is bool &&
+             data.preStockSummary is string && data.preStockSummary.size() <= 600 &&
+             data.postStockChecked is bool &&
+             data.postStockSummary is string && data.postStockSummary.size() <= 600 &&
+             data.cleanlinessChecked is bool &&
+             data.cleanlinessExteriorOk is bool &&
+             data.cleanlinessCabinOk is bool &&
+             data.cleanlinessGlassOk is bool &&
+             data.cleanlinessTrashFree is bool &&
+             data.cleanlinessNote is string && data.cleanlinessNote.size() <= 300 &&
+             (!('cleanlinessFileName' in data) || (data.cleanlinessFileName is string && data.cleanlinessFileName.size() <= 120)) &&
+             (!('cleanlinessFileBase64' in data) || (data.cleanlinessFileBase64 is string && data.cleanlinessFileBase64.size() <= 260000)) &&
+             (!('signerName' in data) || (data.signerName is string && data.signerName.size() <= 80)) &&
+             (!('signerUid' in data) || (data.signerUid is string && data.signerUid.size() <= 128)) &&
+             (!('signOffNote' in data) || (data.signOffNote is string && data.signOffNote.size() <= 400)) &&
+             (!('signatureSvgPath' in data) || (data.signatureSvgPath is string && data.signatureSvgPath.size() <= 25000)) &&
+             (!('signedOffAt' in data) || (data.signedOffAt is timestamp && data.signedOffAt <= request.time));
+    }
+
+    function isValidVisitReport(data) {
+      return isValidId(data.shiftId) &&
+             isValidId(data.teamId) &&
+             (!('csuCode' in data) || (data.csuCode is string && data.csuCode.size() <= 32)) &&
+             data.assistantUid is string && data.assistantUid.size() >= 1 && data.assistantUid.size() <= 128 &&
+             data.assistantName is string && data.assistantName.size() >= 1 && data.assistantName.size() <= 80 &&
+             isBoundedStringList(data.memberUids, 1, 20) &&
+             data.storeName is string && data.storeName.size() >= 2 && data.storeName.size() <= 100 &&
+             data.storeAddress is string && data.storeAddress.size() <= 200 &&
+             data.visitStatus in ['CHECKED_IN', 'COMPLETED'] &&
+             data.orderDone is bool &&
+             data.orderItemsPicked is string && data.orderItemsPicked.size() <= 400 &&
+             data.orderPhotoBase64 is string && data.orderPhotoBase64.size() >= 10 && data.orderPhotoBase64.size() <= 180000 &&
+             data.planogramDone is bool &&
+             data.planogramVersionRef is string && data.planogramVersionRef.size() <= 40 &&
+             data.planogramPhotoBase64 is string && data.planogramPhotoBase64.size() >= 10 && data.planogramPhotoBase64.size() <= 180000 &&
+             data.promoDone is bool &&
+             data.promoCycleName is string && data.promoCycleName.size() <= 60 &&
+             data.posmPhotoBase64 is string && data.posmPhotoBase64.size() >= 10 && data.posmPhotoBase64.size() <= 180000 &&
+             data.latitude is number && data.latitude >= -90.0 && data.latitude <= 90.0 &&
+             data.longitude is number && data.longitude >= -180.0 && data.longitude <= 180.0 &&
+             data.notes is string && data.notes.size() <= 500;
+    }
+
+    function isValidVehicleStock(data) {
+      return isValidId(data.shiftId) &&
+             isValidId(data.teamId) &&
+             data.assistantUid is string && data.assistantUid.size() >= 1 && data.assistantUid.size() <= 128 &&
+             isBoundedStringList(data.memberUids, 1, 20) &&
+             data.skuCode is string && data.skuCode.size() >= 1 && data.skuCode.size() <= 32 &&
+             data.productName is string && data.productName.size() >= 2 && data.productName.size() <= 80 &&
+             data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+             data.qtyBefore is int && data.qtyBefore >= 0 && data.qtyBefore <= 100000 &&
+             data.qtyAfter is int && data.qtyAfter >= 0 && data.qtyAfter <= 100000 &&
+             data.conditionOk is bool &&
+             data.notes is string && data.notes.size() <= 200;
+    }
+
+    // --- 1. /users/{userId} ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'email', 'role', 'activeTeamId', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'role', 'activeTeamId', 'vehiclePlate', 'accompaniedSalesName', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == existing().userId &&
+                       incoming().email == existing().email &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'role', 'activeTeamId', 'vehiclePlate', 'accompaniedSalesName', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    // --- 2. /teams/{teamId} ---
+    match /teams/{teamId} {
+      allow get: if isSignedIn() && isValidId(teamId) && (request.auth.uid in existing().memberUids || isAdmin());
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(teamId) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().joinCode == teamId &&
+                       incoming().keys().hasAll(['teamName', 'ownerUid', 'joinCode', 'memberUids', 'adminUids', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['teamName', 'ownerUid', 'joinCode', 'memberUids', 'adminUids', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidTeam(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(teamId) &&
+                       isValidTeam(incoming()) &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().joinCode == existing().joinCode &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       (
+                         isAdmin() ||
+                         (request.auth.uid in existing().adminUids &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['teamName', 'memberUids', 'adminUids', 'updatedAt'])) ||
+                         (request.auth.uid in incoming().memberUids &&
+                          incoming().memberUids.hasAll(existing().memberUids) &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(teamId) && (request.auth.uid == existing().ownerUid || isAdmin());
+    }
+
+    // --- 3. /planograms/{planogramId} ---
+    match /planograms/{planogramId} {
+      allow get: if isSignedIn() && isValidId(planogramId) && (request.auth.uid in existing().memberUids || isAdmin());
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(planogramId) &&
+                       isValidPlanogram(incoming()) &&
+                       incoming().createdByUid == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().keys().hasAll(['teamId', 'createdByUid', 'createdByName', 'memberUids', 'title', 'versionCode', 'cycleName', 'category', 'shelfInstructions', 'active', 'revision', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['teamId', 'createdByUid', 'createdByName', 'memberUids', 'title', 'versionCode', 'cycleName', 'category', 'shelfInstructions', 'promoHighlight', 'imageBase64', 'active', 'revision', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       (isTeamAdmin(incoming().teamId) || isAdmin());
+
+      allow update: if isSignedIn() &&
+                       isValidId(planogramId) &&
+                       isValidPlanogram(incoming()) &&
+                       incoming().teamId == existing().teamId &&
+                       incoming().createdByUid == existing().createdByUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       (isTeamAdmin(existing().teamId) || isAdmin()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'versionCode', 'cycleName', 'category', 'shelfInstructions', 'promoHighlight', 'imageBase64', 'active', 'revision', 'memberUids', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(planogramId) && (isTeamAdmin(existing().teamId) || isAdmin());
+    }
+
+    // --- 4. /csu_outlets/{csuId} ---
+    match /csu_outlets/{csuId} {
+      allow get: if isSignedIn() && isValidId(csuId) && (request.auth.uid in existing().memberUids || isAdmin());
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(csuId) &&
+                       isValidCsuOutlet(incoming()) &&
+                       incoming().createdByUid == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().keys().hasAll(['teamId', 'createdByUid', 'memberUids', 'csuCode', 'storeName', 'address', 'latitude', 'longitude', 'assignedAssistantName', 'priority', 'active', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['teamId', 'createdByUid', 'memberUids', 'csuCode', 'storeName', 'address', 'latitude', 'longitude', 'assignedAssistantName', 'priority', 'active', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       (isTeamAdmin(incoming().teamId) || isAdmin());
+
+      allow update: if isSignedIn() &&
+                       isValidId(csuId) &&
+                       isValidCsuOutlet(incoming()) &&
+                       incoming().teamId == existing().teamId &&
+                       incoming().createdByUid == existing().createdByUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       (isTeamAdmin(existing().teamId) || isAdmin()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['csuCode', 'storeName', 'address', 'latitude', 'longitude', 'assignedAssistantName', 'priority', 'active', 'memberUids', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(csuId) && (isTeamAdmin(existing().teamId) || isAdmin());
+    }
+
+    // --- 5. /sales_assistants/{assistantId} ---
+    match /sales_assistants/{assistantId} {
+      allow get: if isSignedIn() && isValidId(assistantId) && (request.auth.uid in existing().memberUids || isAdmin());
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(assistantId) &&
+                       isValidSalesAssistant(incoming()) &&
+                       incoming().createdByUid == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().keys().hasAll(['teamId', 'createdByUid', 'memberUids', 'employeeCode', 'fullName', 'vehiclePlate', 'pairedSalesName', 'region', 'active', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['teamId', 'createdByUid', 'memberUids', 'employeeCode', 'fullName', 'vehiclePlate', 'pairedSalesName', 'region', 'active', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       (isTeamAdmin(incoming().teamId) || isAdmin());
+
+      allow update: if isSignedIn() &&
+                       isValidId(assistantId) &&
+                       isValidSalesAssistant(incoming()) &&
+                       incoming().teamId == existing().teamId &&
+                       incoming().createdByUid == existing().createdByUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       (isTeamAdmin(existing().teamId) || isAdmin()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['employeeCode', 'fullName', 'vehiclePlate', 'pairedSalesName', 'region', 'active', 'memberUids', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(assistantId) && (isTeamAdmin(existing().teamId) || isAdmin());
+    }
+
+    // --- 6. /daily_shifts/{shiftId} ---
+    match /daily_shifts/{shiftId} {
+      allow get: if isSignedIn() && isValidId(shiftId) && (request.auth.uid in existing().memberUids || isAdmin());
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(shiftId) &&
+                       isValidDailyShift(incoming()) &&
+                       incoming().assistantUid == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().status == 'ACTIVE' &&
+                       exists(/databases/$(database)/documents/teams/$(incoming().teamId)) &&
+                       incoming().keys().hasAll([
+                         'teamId', 'assistantUid', 'assistantName', 'accompaniedSalesName', 'vehiclePlate',
+                         'shiftDate', 'activeCycleName', 'memberUids', 'status',
+                         'trackingActive', 'latitude', 'longitude', 'accuracyMeters', 'locationLabel',
+                         'taskOrderPicked', 'taskOrderNote', 'taskPlanogramArranged', 'taskPlanogramNote',
+                         'taskPromoSetup', 'taskPromoNote', 'preStockChecked', 'preStockSummary',
+                         'postStockChecked', 'postStockSummary', 'cleanlinessChecked',
+                         'cleanlinessExteriorOk', 'cleanlinessCabinOk', 'cleanlinessGlassOk',
+                         'cleanlinessTrashFree', 'cleanlinessNote', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'teamId', 'assistantUid', 'assistantName', 'accompaniedSalesName', 'vehiclePlate',
+                         'shiftDate', 'activeCycleName', 'memberUids', 'status',
+                         'trackingActive', 'latitude', 'longitude', 'accuracyMeters', 'locationLabel',
+                         'taskOrderPicked', 'taskOrderNote', 'taskPlanogramArranged', 'taskPlanogramNote',
+                         'taskPromoSetup', 'taskPromoNote', 'preStockChecked', 'preStockSummary',
+                         'postStockChecked', 'postStockSummary', 'cleanlinessChecked',
+                         'cleanlinessExteriorOk', 'cleanlinessCabinOk', 'cleanlinessGlassOk',
+                         'cleanlinessTrashFree', 'cleanlinessNote', 'cleanlinessFileName',
+                         'cleanlinessFileBase64', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time;
+
+      allow update: if isSignedIn() &&
+                       isValidId(shiftId) &&
+                       isValidDailyShift(incoming()) &&
+                       incoming().teamId == existing().teamId &&
+                       incoming().assistantUid == existing().assistantUid &&
+                       incoming().shiftDate == existing().shiftDate &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       (
+                         isAdmin() ||
+                         (
+                           existing().status != 'SIGNED_OFF' &&
+                           request.auth.uid == existing().assistantUid &&
+                           incoming().status in ['ACTIVE', 'PENDING_SIGNOFF'] &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'assistantName', 'trackingActive', 'latitude', 'longitude', 'accuracyMeters', 'locationLabel',
+                             'taskOrderPicked', 'taskOrderNote', 'taskPlanogramArranged', 'taskPlanogramNote',
+                             'taskPromoSetup', 'taskPromoNote', 'preStockChecked', 'preStockSummary',
+                             'postStockChecked', 'postStockSummary', 'cleanlinessChecked',
+                             'cleanlinessExteriorOk', 'cleanlinessCabinOk', 'cleanlinessGlassOk',
+                             'cleanlinessTrashFree', 'cleanlinessNote', 'cleanlinessFileName',
+                             'cleanlinessFileBase64', 'accompaniedSalesName',
+                             'vehiclePlate', 'activeCycleName', 'status', 'memberUids', 'updatedAt'
+                           ])
+                         ) ||
+                         (
+                           existing().status != 'SIGNED_OFF' &&
+                           request.auth.uid in existing().memberUids &&
+                           (request.auth.uid != existing().assistantUid || isTeamAdmin(existing().teamId) || isAdmin()) &&
+                           incoming().status == 'SIGNED_OFF' &&
+                           incoming().signerUid == request.auth.uid &&
+                           'signerName' in incoming() && incoming().signerName.size() >= 2 &&
+                           'signatureSvgPath' in incoming() && incoming().signatureSvgPath.size() >= 5 &&
+                           'signedOffAt' in incoming() && incoming().signedOffAt is timestamp && incoming().signedOffAt <= request.time &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'status', 'signerName', 'signerUid', 'signOffNote', 'signatureSvgPath', 'signedOffAt', 'updatedAt'
+                           ])
+                         )
+                       );
+
+      allow delete: if isSignedIn() && isValidId(shiftId) && ((request.auth.uid == existing().assistantUid && existing().status != 'SIGNED_OFF') || isAdmin());
+    }
+
+    // --- 7. /visit_reports/{visitId} ---
+    match /visit_reports/{visitId} {
+      allow get: if isSignedIn() && isValidId(visitId) && (request.auth.uid in existing().memberUids || isAdmin());
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(visitId) &&
+                       isValidVisitReport(incoming()) &&
+                       incoming().assistantUid == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       exists(/databases/$(database)/documents/teams/$(incoming().teamId)) &&
+                       exists(/databases/$(database)/documents/daily_shifts/$(incoming().shiftId)) &&
+                       incoming().keys().hasAll([
+                         'shiftId', 'teamId', 'assistantUid', 'assistantName', 'memberUids',
+                         'storeName', 'storeAddress', 'visitStatus', 'orderDone', 'orderItemsPicked',
+                         'orderPhotoBase64', 'planogramDone', 'planogramVersionRef', 'planogramPhotoBase64',
+                         'promoDone', 'promoCycleName', 'posmPhotoBase64',
+                         'latitude', 'longitude', 'notes', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'shiftId', 'teamId', 'csuCode', 'assistantUid', 'assistantName', 'memberUids',
+                         'storeName', 'storeAddress', 'visitStatus', 'orderDone', 'orderItemsPicked',
+                         'orderPhotoBase64', 'planogramDone', 'planogramVersionRef', 'planogramPhotoBase64',
+                         'promoDone', 'promoCycleName', 'posmPhotoBase64',
+                         'latitude', 'longitude', 'notes', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time;
+
+      allow update: if isSignedIn() &&
+                       isValidId(visitId) &&
+                       isValidVisitReport(incoming()) &&
+                       incoming().shiftId == existing().shiftId &&
+                       incoming().teamId == existing().teamId &&
+                       incoming().assistantUid == existing().assistantUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       (request.auth.uid == existing().assistantUid || isAdmin()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'csuCode', 'storeName', 'storeAddress', 'visitStatus', 'orderDone', 'orderItemsPicked',
+                         'orderPhotoBase64', 'planogramDone', 'planogramVersionRef', 'planogramPhotoBase64',
+                         'promoDone', 'promoCycleName', 'posmPhotoBase64',
+                         'notes', 'memberUids', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(visitId) && (request.auth.uid == existing().assistantUid || isAdmin());
+    }
+
+    // --- 8. /vehicle_stocks/{stockId} ---
+    match /vehicle_stocks/{stockId} {
+      allow get: if isSignedIn() && isValidId(stockId) && (request.auth.uid in existing().memberUids || isAdmin());
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(stockId) &&
+                       isValidVehicleStock(incoming()) &&
+                       incoming().assistantUid == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       exists(/databases/$(database)/documents/teams/$(incoming().teamId)) &&
+                       exists(/databases/$(database)/documents/daily_shifts/$(incoming().shiftId)) &&
+                       incoming().keys().hasAll([
+                         'shiftId', 'teamId', 'assistantUid', 'memberUids',
+                         'skuCode', 'productName', 'unit', 'qtyBefore', 'qtyAfter',
+                         'conditionOk', 'notes', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'shiftId', 'teamId', 'assistantUid', 'memberUids',
+                         'skuCode', 'productName', 'unit', 'qtyBefore', 'qtyAfter',
+                         'conditionOk', 'notes', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time;
+
+      allow update: if isSignedIn() &&
+                       isValidId(stockId) &&
+                       isValidVehicleStock(incoming()) &&
+                       incoming().shiftId == existing().shiftId &&
+                       incoming().teamId == existing().teamId &&
+                       incoming().assistantUid == existing().assistantUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       (request.auth.uid == existing().assistantUid || isAdmin()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'skuCode', 'productName', 'unit', 'qtyBefore', 'qtyAfter',
+                         'conditionOk', 'notes', 'memberUids', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(stockId) && (request.auth.uid == existing().assistantUid || isAdmin());
+    }
+  }
+}

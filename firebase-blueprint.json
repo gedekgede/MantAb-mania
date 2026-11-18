@@ -1,0 +1,251 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile with workspace role and active team reference.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID of the user." },
+        "displayName": { "type": "string", "description": "Display name." },
+        "email": { "type": "string", "description": "Email address (owner-only)." },
+        "role": { "type": "string", "enum": ["ASSISTANT", "SALES_LEAD", "ADMIN"], "description": "Preferred UI workspace role." },
+        "activeTeamId": { "type": "string", "description": "Active team document ID." },
+        "vehiclePlate": { "type": "string", "description": "Assigned vehicle license plate." },
+        "accompaniedSalesName": { "type": "string", "description": "Name of accompanied sales representative." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": ["userId", "displayName", "email", "role", "activeTeamId", "createdAt", "updatedAt"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "Sales operations team linking assistants, accompanied sales reps, and admins.",
+      "type": "object",
+      "properties": {
+        "teamName": { "type": "string", "description": "Team display name." },
+        "ownerUid": { "type": "string", "description": "Creator UID." },
+        "joinCode": { "type": "string", "description": "Team document ID / invite code." },
+        "memberUids": { "type": "array", "description": "List of member UIDs (max 20)." },
+        "adminUids": { "type": "array", "description": "List of team admin UIDs (max 10)." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": ["teamName", "ownerUid", "joinCode", "memberUids", "adminUids", "createdAt", "updatedAt"]
+    },
+    "Planogram": {
+      "title": "Planogram",
+      "description": "Admin-uploaded retail shelf planogram blueprint synced to sales assistants.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string", "description": "Parent team ID." },
+        "createdByUid": { "type": "string", "description": "Admin UID who uploaded the planogram." },
+        "createdByName": { "type": "string", "description": "Uploader display name." },
+        "memberUids": { "type": "array", "description": "Denormalized team member UIDs." },
+        "title": { "type": "string", "description": "Planogram title." },
+        "versionCode": { "type": "string", "description": "Version tag e.g. v2026.11-C11." },
+        "cycleName": { "type": "string", "description": "Active promo cycle name." },
+        "category": { "type": "string", "description": "Shelf product category." },
+        "shelfInstructions": { "type": "string", "description": "Tier-by-tier shelf arrangement rules." },
+        "promoHighlight": { "type": "string", "description": "In-store promo highlight for this planogram." },
+        "imageBase64": { "type": "string", "description": "Optional compressed JPEG thumbnail encoded in base64." },
+        "active": { "type": "boolean", "description": "Whether this planogram is currently active." },
+        "revision": { "type": "integer", "description": "Incremental revision number." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": ["teamId", "createdByUid", "createdByName", "memberUids", "title", "versionCode", "cycleName", "category", "shelfInstructions", "active", "revision", "createdAt", "updatedAt"]
+    },
+    "CsuOutlet": {
+      "title": "CsuOutlet",
+      "description": "Active mandatory Customer Service Unit (CSU / store) uploaded by admin with geotag coordinates.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string", "description": "Parent team ID." },
+        "createdByUid": { "type": "string", "description": "Admin UID." },
+        "memberUids": { "type": "array", "description": "Denormalized team member UIDs." },
+        "csuCode": { "type": "string", "description": "Unique CSU / outlet code." },
+        "storeName": { "type": "string", "description": "Customer store name." },
+        "address": { "type": "string", "description": "Store address." },
+        "latitude": { "type": "number", "description": "Geotag latitude." },
+        "longitude": { "type": "number", "description": "Geotag longitude." },
+        "assignedAssistantName": { "type": "string", "description": "Assigned assistant name or all." },
+        "priority": { "type": "string", "enum": ["WAJIB", "PRIORITAS", "REGULER"], "description": "Visit priority." },
+        "active": { "type": "boolean", "description": "Whether CSU is active for visit." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": ["teamId", "createdByUid", "memberUids", "csuCode", "storeName", "address", "latitude", "longitude", "assignedAssistantName", "priority", "active", "createdAt", "updatedAt"]
+    },
+    "SalesAssistant": {
+      "title": "SalesAssistant",
+      "description": "Sales assistant roster entry uploaded and managed by admin.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string", "description": "Parent team ID." },
+        "createdByUid": { "type": "string", "description": "Admin UID." },
+        "memberUids": { "type": "array", "description": "Denormalized team member UIDs." },
+        "employeeCode": { "type": "string", "description": "Employee / assistant code." },
+        "fullName": { "type": "string", "description": "Sales assistant full name." },
+        "vehiclePlate": { "type": "string", "description": "Assigned vehicle plate." },
+        "pairedSalesName": { "type": "string", "description": "Accompanied sales representative name." },
+        "region": { "type": "string", "description": "Coverage area." },
+        "active": { "type": "boolean", "description": "Whether assistant is active." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": ["teamId", "createdByUid", "memberUids", "employeeCode", "fullName", "vehiclePlate", "pairedSalesName", "region", "active", "createdAt", "updatedAt"]
+    },
+    "DailyShift": {
+      "title": "DailyShift",
+      "description": "Daily operational record with live GPS location, core daily tasks, vehicle checks, and end-of-day sales sign-off.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string", "description": "Parent team ID." },
+        "assistantUid": { "type": "string", "description": "Sales assistant UID." },
+        "assistantName": { "type": "string", "description": "Sales assistant name." },
+        "accompaniedSalesName": { "type": "string", "description": "Accompanied sales rep name." },
+        "vehiclePlate": { "type": "string", "description": "Vehicle license plate." },
+        "shiftDate": { "type": "string", "description": "ISO date YYYY-MM-DD." },
+        "activeCycleName": { "type": "string", "description": "Current promotional cycle." },
+        "memberUids": { "type": "array", "description": "Denormalized team member UIDs." },
+        "status": { "type": "string", "enum": ["ACTIVE", "PENDING_SIGNOFF", "SIGNED_OFF"], "description": "Shift lifecycle status." },
+        "trackingActive": { "type": "boolean", "description": "Whether real-time GPS tracking is active." },
+        "latitude": { "type": "number", "description": "Latest latitude." },
+        "longitude": { "type": "number", "description": "Latest longitude." },
+        "accuracyMeters": { "type": "number", "description": "GPS accuracy in meters." },
+        "locationLabel": { "type": "string", "description": "Human-readable location label." },
+        "taskOrderPicked": { "type": "boolean", "description": "Task 1: Sales order picked from vehicle." },
+        "taskOrderNote": { "type": "string", "description": "Notes for order picking." },
+        "taskPlanogramArranged": { "type": "boolean", "description": "Task 2: Planogram arranged to latest update." },
+        "taskPlanogramNote": { "type": "string", "description": "Notes for planogram arrangement." },
+        "taskPromoSetup": { "type": "boolean", "description": "Task 3: In-store promo set up for current cycle." },
+        "taskPromoNote": { "type": "string", "description": "Notes for in-store promo." },
+        "preStockChecked": { "type": "boolean", "description": "Pre-visit vehicle stock check completed." },
+        "preStockSummary": { "type": "string", "description": "Pre-visit stock check notes." },
+        "postStockChecked": { "type": "boolean", "description": "Post-visit vehicle stock check completed." },
+        "postStockSummary": { "type": "string", "description": "Post-visit stock check notes." },
+        "cleanlinessChecked": { "type": "boolean", "description": "Vehicle cleanliness verified." },
+        "cleanlinessExteriorOk": { "type": "boolean", "description": "Vehicle exterior clean." },
+        "cleanlinessCabinOk": { "type": "boolean", "description": "Cargo area clean & organized." },
+        "cleanlinessGlassOk": { "type": "boolean", "description": "Windshield and mirrors clean." },
+        "cleanlinessTrashFree": { "type": "boolean", "description": "Free of trash and odor." },
+        "cleanlinessNote": { "type": "string", "description": "Vehicle cleanliness notes." },
+        "cleanlinessFileName": { "type": "string", "description": "Uploaded cleanliness proof file or photo name." },
+        "cleanlinessFileBase64": { "type": "string", "description": "Uploaded cleanliness proof file/image in base64." },
+        "signerName": { "type": "string", "description": "Accompanied sales rep signer name." },
+        "signerUid": { "type": "string", "description": "Signer UID." },
+        "signOffNote": { "type": "string", "description": "Sign-off remarks." },
+        "signatureSvgPath": { "type": "string", "description": "Serialized signature stroke path." },
+        "signedOffAt": { "type": "string", "format": "date-time", "description": "Server timestamp when signed off." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": [
+        "teamId", "assistantUid", "assistantName", "accompaniedSalesName", "vehiclePlate",
+        "shiftDate", "activeCycleName", "memberUids", "status",
+        "trackingActive", "latitude", "longitude", "accuracyMeters", "locationLabel",
+        "taskOrderPicked", "taskOrderNote", "taskPlanogramArranged", "taskPlanogramNote",
+        "taskPromoSetup", "taskPromoNote", "preStockChecked", "preStockSummary",
+        "postStockChecked", "postStockSummary", "cleanlinessChecked",
+        "cleanlinessExteriorOk", "cleanlinessCabinOk", "cleanlinessGlassOk",
+        "cleanlinessTrashFree", "cleanlinessNote", "createdAt", "updatedAt"
+      ]
+    },
+    "VisitReport": {
+      "title": "VisitReport",
+      "description": "Customer store visit report with GPS check-in and mandatory task photos.",
+      "type": "object",
+      "properties": {
+        "shiftId": { "type": "string", "description": "Parent DailyShift ID." },
+        "teamId": { "type": "string", "description": "Parent team ID." },
+        "csuCode": { "type": "string", "description": "Optional CSU outlet code visited." },
+        "assistantUid": { "type": "string", "description": "Sales assistant UID." },
+        "assistantName": { "type": "string", "description": "Sales assistant name." },
+        "memberUids": { "type": "array", "description": "Denormalized team member UIDs." },
+        "storeName": { "type": "string", "description": "Customer store name." },
+        "storeAddress": { "type": "string", "description": "Customer store address." },
+        "visitStatus": { "type": "string", "enum": ["CHECKED_IN", "COMPLETED"], "description": "Visit status." },
+        "orderDone": { "type": "boolean", "description": "Order items picked from vehicle for this store." },
+        "orderItemsPicked": { "type": "string", "description": "Order items picked from vehicle." },
+        "orderPhotoBase64": { "type": "string", "description": "Mandatory photo proof of order picking." },
+        "planogramDone": { "type": "boolean", "description": "Planogram arranged at store." },
+        "planogramVersionRef": { "type": "string", "description": "Planogram version followed." },
+        "planogramPhotoBase64": { "type": "string", "description": "Mandatory photo proof of planogram arrangement." },
+        "promoDone": { "type": "boolean", "description": "In-store promo / POSM executed." },
+        "promoCycleName": { "type": "string", "description": "Active cycle name." },
+        "posmPhotoBase64": { "type": "string", "description": "Mandatory photo proof of POSM / promo setup." },
+        "latitude": { "type": "number", "description": "Check-in latitude." },
+        "longitude": { "type": "number", "description": "Check-in longitude." },
+        "notes": { "type": "string", "description": "Visit remarks." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": [
+        "shiftId", "teamId", "assistantUid", "assistantName", "memberUids",
+        "storeName", "storeAddress", "visitStatus", "orderDone", "orderItemsPicked",
+        "orderPhotoBase64", "planogramDone", "planogramVersionRef", "planogramPhotoBase64",
+        "promoDone", "promoCycleName", "posmPhotoBase64",
+        "latitude", "longitude", "notes", "createdAt", "updatedAt"
+      ]
+    },
+    "VehicleStockItem": {
+      "title": "VehicleStockItem",
+      "description": "Vehicle inventory item checked before and after daily customer visits.",
+      "type": "object",
+      "properties": {
+        "shiftId": { "type": "string", "description": "Parent DailyShift ID." },
+        "teamId": { "type": "string", "description": "Parent team ID." },
+        "assistantUid": { "type": "string", "description": "Sales assistant UID." },
+        "memberUids": { "type": "array", "description": "Denormalized team member UIDs." },
+        "skuCode": { "type": "string", "description": "SKU code." },
+        "productName": { "type": "string", "description": "Product name." },
+        "unit": { "type": "string", "description": "Unit of measure." },
+        "qtyBefore": { "type": "integer", "description": "Quantity before daily visits." },
+        "qtyAfter": { "type": "integer", "description": "Quantity after daily visits." },
+        "conditionOk": { "type": "boolean", "description": "Packaging & condition status." },
+        "notes": { "type": "string", "description": "Stock discrepancy or remarks." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": [
+        "shiftId", "teamId", "assistantUid", "memberUids",
+        "skuCode", "productName", "unit", "qtyBefore", "qtyAfter",
+        "conditionOk", "notes", "createdAt", "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-only user profile and workspace pointer."
+    },
+    "/teams/{teamId}": {
+      "schema": { "$ref": "#/entities/Team" },
+      "description": "Team membership and admin roster for multi-device sync."
+    },
+    "/planograms/{planogramId}": {
+      "schema": { "$ref": "#/entities/Planogram" },
+      "description": "Latest and historical shelf planograms uploaded by admins."
+    },
+    "/csu_outlets/{csuId}": {
+      "schema": { "$ref": "#/entities/CsuOutlet" },
+      "description": "Active mandatory CSUs uploaded by admin with geotag coordinates."
+    },
+    "/sales_assistants/{assistantId}": {
+      "schema": { "$ref": "#/entities/SalesAssistant" },
+      "description": "Sales assistant roster uploaded and managed by admin."
+    },
+    "/daily_shifts/{shiftId}": {
+      "schema": { "$ref": "#/entities/DailyShift" },
+      "description": "Daily sales assistant shift tracking location, tasks, vehicle checks, and sign-off."
+    },
+    "/visit_reports/{visitId}": {
+      "schema": { "$ref": "#/entities/VisitReport" },
+      "description": "Customer store visit reports linked to a daily shift."
+    },
+    "/vehicle_stocks/{stockId}": {
+      "schema": { "$ref": "#/entities/VehicleStockItem" },
+      "description": "Vehicle stock counts verified before and after daily visits."
+    }
+  }
+}
