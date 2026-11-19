@@ -23,16 +23,18 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - name: Setup Android SDK (API 36.1)
+        uses: android-actions/setup-android@v4
+        with:
+          packages: |
+            platform-tools
+            platforms;android-36.1
+            build-tools;36.0.0
+
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
-
-      - name: Accept Android SDK licenses
-        run: |
-          if [ -d "${ANDROID_HOME}/cmdline-tools/latest/bin" ]; then
-            yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses || true
-          fi
 
       - name: Prepare debug keystore and env
         run: |
@@ -42,10 +44,14 @@ jobs:
           touch .env
 
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --no-daemon
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Prepare APK artifact
-        run: cp app/build/outputs/apk/debug/app-debug.apk KawalSales.apk
+      - name: Locate generated APK
+        run: |
+          APK_PATH=$(find . -path "*/outputs/apk/debug/*.apk" | head -n 1)
+          echo "Found APK: $APK_PATH"
+          test -n "$APK_PATH"
+          cp "$APK_PATH" KawalSales.apk
 
       - name: Upload APK to Actions Artifacts
         uses: actions/upload-artifact@v4
@@ -55,6 +61,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish direct APK download on GitHub Releases
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -63,6 +70,6 @@ jobs:
           else
             gh release create latest-apk KawalSales.apk \
               --title "KawalSales APK (Terbaru)" \
-              --notes "APK KawalSales otomatis dibuild dari GitHub Actions (commit ${{ github.sha }})." \
+              --notes "APK KawalSales otomatis dibuild dari GitHub Actions." \
               --target "${{ github.ref_name }}"
           fi
