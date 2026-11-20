@@ -2,6 +2,7 @@ package com.example.auth
 
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -61,6 +62,8 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import com.example.R
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
@@ -76,6 +79,12 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 private const val AUTH_TAG = "KawalSalesAuth"
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 fun attemptAutoSignIn(
     context: Context,
@@ -140,12 +149,38 @@ fun onGoogleSignInClicked(
 
     scope.launch {
         try {
-            val activity = context as? Activity
+            val activity = context.findActivity()
             if (activity == null) {
                 onAuthError("Konteks Activity diperlukan untuk login Google.")
                 return@launch
             }
-            val cred = credentialManager.getCredential(activity, request).credential
+            val cred = try {
+                credentialManager.getCredential(activity, request).credential
+            } catch (e: GetCredentialCancellationException) {
+                throw e
+            } catch (e: NoCredentialException) {
+                Log.w(AUTH_TAG, "GetSignInWithGoogleOption NoCredentialException, trying GetGoogleIdOption fallback", e)
+                val fallbackOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(clientId)
+                    .setAutoSelectEnabled(false)
+                    .build()
+                val fallbackRequest = GetCredentialRequest.Builder()
+                    .addCredentialOption(fallbackOption)
+                    .build()
+                credentialManager.getCredential(activity, fallbackRequest).credential
+            } catch (e: GetCredentialException) {
+                Log.w(AUTH_TAG, "GetSignInWithGoogleOption failed (${e.type}), trying GetGoogleIdOption fallback", e)
+                val fallbackOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(clientId)
+                    .setAutoSelectEnabled(false)
+                    .build()
+                val fallbackRequest = GetCredentialRequest.Builder()
+                    .addCredentialOption(fallbackOption)
+                    .build()
+                credentialManager.getCredential(activity, fallbackRequest).credential
+            }
             if (cred is CustomCredential && cred.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val token = GoogleIdTokenCredential.createFrom(cred.data).idToken
                 Firebase.auth.signInWithCredential(GoogleAuthProvider.getCredential(token, null)).await()
@@ -155,6 +190,8 @@ fun onGoogleSignInClicked(
             }
         } catch (e: GetCredentialCancellationException) {
             Log.w(AUTH_TAG, "Google Sign-In cancelled or dismissed: ${e.message}", e)
+            val detail = e.message?.takeIf { it.isNotBlank() } ?: "Dialog login ditutup atau diblokir sistem"
+            onAuthError("Login Google tidak selesai: $detail")
             onAuthCancelled()
         } catch (e: Exception) {
             Log.e(AUTH_TAG, "Google Sign-In failed", e)

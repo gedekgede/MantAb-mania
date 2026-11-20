@@ -66,14 +66,24 @@ jobs:
 
       - name: Prepare Debug Keystore
         shell: bash
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
-          if [ -s debug.keystore.base64 ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-          elif [ ! -f debug.keystore ]; then
-            keytool -genkeypair -v -keystore debug.keystore \
-              -storepass android -alias androiddebugkey -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            printf '%s' "$DEBUG_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > debug.keystore
+            echo "Restored debug.keystore from GitHub Secret."
+          elif [ -s debug.keystore.base64 ]; then
+            tr -d '[:space:]' < debug.keystore.base64 | base64 -d > debug.keystore
+            echo "Restored debug.keystore from debug.keystore.base64."
+          else
+            echo "::error::debug.keystore.base64 tidak ada di GitHub dan secret DEBUG_KEYSTORE_BASE64 belum diisi. Tanpa keystore ini, SHA-1 APK tidak cocok dengan Firebase sehingga login Google akan gagal."
+            exit 1
+          fi
+          SHA1=$(keytool -list -v -keystore debug.keystore -storepass android | grep -oE 'SHA1:\s*[A-F0-9:]+' | head -n 1)
+          echo "Keystore $SHA1"
+          if ! echo "$SHA1" | grep -qi "F3:0E:FA:7D:B3:0C:A3:88:CD:85:8E:16:B6:F1:04:B2:6D:46:7F:30"; then
+            echo "::error::SHA1 keystore ($SHA1) tidak cocok dengan Firebase (F3:0E:FA:7D:B3:0C:A3:88:CD:85:8E:16:B6:F1:04:B2:6D:46:7F:30)."
+            exit 1
           fi
 
       - name: Restore google-services.json
