@@ -76,6 +76,22 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
+      - name: Restore google-services.json
+        shell: bash
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ ! -f app/google-services.json ]; then
+            if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+              printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+              python3 -m json.tool app/google-services.json > /dev/null
+              echo "Restored app/google-services.json from GitHub Secret."
+            else
+              echo "::error::app/google-services.json belum ada dan secret GOOGLE_SERVICES_JSON belum diatur di GitHub Settings -> Secrets and variables -> Actions."
+              exit 1
+            fi
+          fi
+
       - name: Build Debug APK
         shell: bash
         run: |
